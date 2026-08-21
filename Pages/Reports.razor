@@ -1,0 +1,135 @@
+@page "/reports"
+@inject ReportService ReportSvc
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Reports</PageTitle>
+
+<PagePermissionGuard PageKey="Reports">
+
+<h1>📊 Reports</h1>
+
+<div class="report-filter">
+    <label>
+        Date
+        <input id="reportDatePicker" class="report-date-input" placeholder="Pick a date, or drag for a range" readonly />
+    </label>
+
+    @if (_report is not null && _errorMessage is null)
+    {
+        <a class="btn btn-pdf" href="@PdfDownloadUrl" target="_blank">⬇ Download PDF</a>
+    }
+</div>
+
+@if (_errorMessage is not null)
+{
+    <p class="report-error">@_errorMessage</p>
+}
+
+@if (_report is not null)
+{
+    <div class="report-summary">
+        <div>Total Bookings <strong>@_report.TotalBookings</strong></div>
+        <div>Cancelled <strong>@_report.CancelledBookings</strong></div>
+        <div>Total Revenue <strong>৳@_report.TotalRevenue.ToString("N0")</strong></div>
+        <div>Due Payments <strong>৳@_report.DuePayments.ToString("N0")</strong></div>
+        <div>Avg Duration <strong>@_report.AverageDurationMinutes.ToString("N0") min</strong></div>
+    </div>
+
+    <table class="data-table">
+        <thead>
+        <tr>
+            @if (!_report.IsSingleDay)
+            {
+                <th>Date</th>
+            }
+            <th>Turf</th><th>Team</th><th>Start</th><th>End</th><th>Status</th><th>Total</th><th>Paid</th><th>Due</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var b in _report.Bookings)
+        {
+            <tr>
+                @if (!_report.IsSingleDay)
+                {
+                    <td>@b.StartTime.ToString("dd MMM yyyy")</td>
+                }
+                <td>@b.Turf?.Name</td>
+                <td>@b.Team?.Name</td>
+                <td>@b.StartTime.ToString("hh:mm tt")</td>
+                <td>@b.EndTime.ToString("hh:mm tt")</td>
+                <td>@b.Status</td>
+                <td>৳@b.TotalAmount.ToString("N0")</td>
+                <td>৳@b.TotalPaid.ToString("N0")</td>
+                <td>৳@b.DueAmount.ToString("N0")</td>
+            </tr>
+        }
+        @if (_report.Bookings.Count == 0)
+        {
+            <tr>
+                <td colspan="@(_report.IsSingleDay ? 8 : 9)" class="report-empty">No bookings for this period.</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+</PagePermissionGuard>
+
+@code {
+    // Both start as today; picking a second day in the calendar turns this into a range.
+    private DateTime _startDate = DateTime.Today;
+    private DateTime _endDate = DateTime.Today;
+    private DailyReportDto? _report;
+    private string? _errorMessage;
+    private DotNetObjectReference<Reports>? _dotNetRef;
+
+    protected override async Task OnInitializedAsync() => await LoadReport();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("turfReports.init", "reportDatePicker", _dotNetRef, _startDate.ToString("yyyy-MM-dd"));
+        }
+    }
+
+    /// <summary>Called from JS (flatpickr) whenever the user picks a day or a day range.</summary>
+    [JSInvokable]
+    public async Task OnDateRangeSelected(string startIso, string endIso)
+    {
+        _startDate = DateTime.Parse(startIso);
+        _endDate = DateTime.Parse(endIso);
+        await LoadReport();
+        StateHasChanged();
+    }
+
+    private async Task LoadReport()
+    {
+        _errorMessage = null;
+
+        if (_endDate.Date < _startDate.Date)
+        {
+            _errorMessage = "The end date can't be before the start date.";
+            _report = null;
+            return;
+        }
+
+        _report = await ReportSvc.GetReportAsync(_startDate, _endDate);
+    }
+
+    private string PdfDownloadUrl =>
+        $"/api/reports/export-pdf?start={_startDate:yyyy-MM-dd}&end={_endDate:yyyy-MM-dd}";
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_dotNetRef is not null)
+        {
+            try { await JS.InvokeVoidAsync("turfReports.destroy"); }
+            catch (JSDisconnectedException) { /* circuit already gone — nothing to clean up */ }
+
+            _dotNetRef.Dispose();
+        }
+    }
+}

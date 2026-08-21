@@ -1,0 +1,52 @@
+@* Wrap a page's markup in this to enforce login + the admin-configured per-role page
+   permission in one place: <PagePermissionGuard PageKey="Dashboard"> ...page content... </PagePermissionGuard>
+   Not logged in -> redirect to the login page (with a return URL back to here).
+   Logged in but the user's role isn't granted this page -> an inline "access denied" message. *@
+@inject AuthenticationStateProvider AuthProvider
+@inject PermissionService PermissionSvc
+@inject NavigationManager Nav
+
+@if (_state == GuardState.Checking)
+{
+    <p class="subtitle">Checking access…</p>
+}
+else if (_state == GuardState.Allowed)
+{
+    @ChildContent
+}
+else if (_state == GuardState.Denied)
+{
+    <div class="access-denied">
+        <h1>🚫 Access denied</h1>
+        <p class="subtitle">
+            Your role (<strong>@_roleName</strong>) doesn't have permission to view this page.
+            Ask an admin to grant it from <strong>Admin → Permissions</strong>.
+        </p>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string PageKey { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private enum GuardState { Checking, Allowed, Denied }
+    private GuardState _state = GuardState.Checking;
+    private string? _roleName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            var returnUrl = Uri.EscapeDataString(new Uri(Nav.Uri).PathAndQuery);
+            Nav.NavigateTo($"/Account/Login?ReturnUrl={returnUrl}", forceLoad: true);
+            return;
+        }
+
+        _roleName = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        var allowed = await PermissionSvc.CanAccessAsync(_roleName, PageKey);
+        _state = allowed ? GuardState.Allowed : GuardState.Denied;
+    }
+}

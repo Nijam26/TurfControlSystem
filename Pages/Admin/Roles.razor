@@ -1,0 +1,124 @@
+@page "/admin/roles"
+@inject IRoleRepository RoleRepo
+@inject RoleManagementService RoleSvc
+
+<PageTitle>Admin · Roles</PageTitle>
+
+<PagePermissionGuard PageKey="AdminRoles">
+
+<h1>🛡️ Roles</h1>
+<p class="subtitle">
+    Create the roles your team needs, then head to <strong>Admin → Permissions</strong> to choose
+    which pages each one can see. The built-in <strong>Admin</strong> role always has full access
+    and can't be renamed or deleted, so there's no way to lock every admin out.
+</p>
+
+<EditForm Model="_form" OnValidSubmit="HandleSave">
+    <div class="form-grid">
+        <label>Role Name <InputText @bind-Value="_form.Name" disabled="@(_editingId is not null && _isSystemRole)" /></label>
+        <label>Description <InputText @bind-Value="_form.Description" /></label>
+    </div>
+
+    <div class="turf-actions inline-actions">
+        <button class="btn btn-primary" type="submit">@(_editingId is null ? "Add Role" : "Save Changes")</button>
+        @if (_editingId is not null)
+        {
+            <button class="btn btn-pause" type="button" @onclick="CancelEdit">Cancel</button>
+        }
+    </div>
+</EditForm>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <p class="message @(_success ? "message-success" : "message-error")">@_message</p>
+}
+
+<table class="data-table">
+    <thead>
+    <tr><th>Name</th><th>Description</th><th>Type</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+    @if (_roles is not null)
+    {
+        @foreach (var role in _roles)
+        {
+            <tr class="@(role.Id == _editingId ? "row-editing" : "")">
+                <td>@role.Name</td>
+                <td>@role.Description</td>
+                <td>@(role.IsSystemRole ? "System" : "Custom")</td>
+                <td class="turf-actions inline-actions">
+                    <button class="btn btn-pause" @onclick="() => StartEdit(role)">✏️ Edit</button>
+                    @if (!role.IsSystemRole)
+                    {
+                        <button class="btn btn-stop" @onclick="() => Delete(role.Id)">🗑 Delete</button>
+                    }
+                </td>
+            </tr>
+        }
+    }
+    </tbody>
+</table>
+
+</PagePermissionGuard>
+
+@code {
+    private List<AppRole>? _roles;
+    private AppRole _form = new();
+    private int? _editingId;
+    private bool _isSystemRole;
+    private string? _message;
+    private bool _success;
+
+    protected override async Task OnInitializedAsync() => await Refresh();
+
+    private async Task Refresh() => _roles = await RoleRepo.GetAllAsync();
+
+    private void StartEdit(AppRole role)
+    {
+        _editingId = role.Id;
+        _isSystemRole = role.IsSystemRole;
+        _form = new AppRole { Id = role.Id, Name = role.Name, Description = role.Description, IsSystemRole = role.IsSystemRole };
+        _message = null;
+    }
+
+    private void CancelEdit()
+    {
+        _editingId = null;
+        _isSystemRole = false;
+        _form = new AppRole();
+    }
+
+    private async Task HandleSave()
+    {
+        if (_editingId is null)
+        {
+            var (success, message, _) = await RoleSvc.CreateRoleAsync(_form.Name, _form.Description);
+            _success = success;
+            _message = message;
+            if (success)
+            {
+                _form = new AppRole();
+                await Refresh();
+            }
+        }
+        else
+        {
+            var (success, message) = await RoleSvc.UpdateRoleAsync(_editingId.Value, _form.Name, _form.Description);
+            _success = success;
+            _message = message;
+            if (success)
+            {
+                CancelEdit();
+                await Refresh();
+            }
+        }
+    }
+
+    private async Task Delete(int roleId)
+    {
+        var (success, message) = await RoleSvc.DeleteRoleAsync(roleId);
+        _success = success;
+        _message = message;
+        await Refresh();
+    }
+}

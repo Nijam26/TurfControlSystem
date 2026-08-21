@@ -1,0 +1,79 @@
+@inject AuthenticationStateProvider AuthProvider
+@inject PermissionService PermissionSvc
+
+<div class="nav-brand">⚽ TURF ARENA</div>
+
+<nav class="nav-menu">
+    @if (_allowedKeys.Contains("Home"))
+    {
+        <NavLink class="nav-link" href="" Match="NavLinkMatch.All">🏠 Home</NavLink>
+    }
+    @if (_allowedKeys.Contains("Dashboard"))
+    {
+        <NavLink class="nav-link" href="dashboard">🎛️ Operator Dashboard</NavLink>
+    }
+    @if (_allowedKeys.Contains("TvDisplay"))
+    {
+        <NavLink class="nav-link" href="tv-display" target="_blank">📺 TV / LED Display</NavLink>
+    }
+    @if (_allowedKeys.Contains("Bookings"))
+    {
+        <NavLink class="nav-link" href="bookings">📅 Bookings</NavLink>
+    }
+    @if (_allowedKeys.Contains("Turfs"))
+    {
+        <NavLink class="nav-link" href="turfs">🏟️ Turfs</NavLink>
+    }
+    @if (_allowedKeys.Contains("Reports"))
+    {
+        <NavLink class="nav-link" href="reports">📊 Reports</NavLink>
+    }
+
+    @if (_allowedKeys.Contains("AdminUsers") || _allowedKeys.Contains("AdminRoles") || _allowedKeys.Contains("AdminPermissions"))
+    {
+        <div class="nav-section-label">Admin</div>
+        @if (_allowedKeys.Contains("AdminUsers"))
+        {
+            <NavLink class="nav-link" href="admin/users">👤 Users</NavLink>
+        }
+        @if (_allowedKeys.Contains("AdminRoles"))
+        {
+            <NavLink class="nav-link" href="admin/roles">🛡️ Roles</NavLink>
+        }
+        @if (_allowedKeys.Contains("AdminPermissions"))
+        {
+            <NavLink class="nav-link" href="admin/permissions">🔐 Permissions</NavLink>
+        }
+    }
+</nav>
+
+@if (_isAuthenticated)
+{
+    <div class="nav-user">
+        <div class="nav-user-name">@_displayName <small>(@_roleName)</small></div>
+        <a class="nav-link nav-logout" href="/Account/Logout">🚪 Sign out</a>
+    </div>
+}
+
+@code {
+    private HashSet<string> _allowedKeys = new();
+    private bool _isAuthenticated;
+    private string? _displayName;
+    private string? _roleName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        _isAuthenticated = user.Identity?.IsAuthenticated == true;
+
+        if (_isAuthenticated)
+        {
+            _displayName = user.FindFirst("DisplayName")?.Value ?? user.Identity!.Name;
+            _roleName = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+
+            var pages = await PermissionSvc.GetAllowedPagesAsync(_roleName);
+            _allowedKeys = pages.Select(p => p.Key).ToHashSet();
+        }
+    }
+}

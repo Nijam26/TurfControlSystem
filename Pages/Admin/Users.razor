@@ -1,0 +1,231 @@
+@page "/admin/users"
+@inject IUserRepository UserRepo
+@inject IRoleRepository RoleRepo
+@inject UserManagementService UserSvc
+@inject AuthenticationStateProvider AuthProvider
+
+<PageTitle>Admin · Users</PageTitle>
+
+<PagePermissionGuard PageKey="AdminUsers">
+
+<h1>👤 Users</h1>
+<p class="subtitle">Create logins and assign each one a role. What a user can see is controlled entirely by their role's page permissions.</p>
+
+<EditForm Model="_form" OnValidSubmit="HandleSave">
+    <div class="form-grid">
+        <label>Username <InputText @bind-Value="_form.Username" disabled="@(_editingId is not null)" /></label>
+        <label>Display Name <InputText @bind-Value="_form.DisplayName" /></label>
+        <label>Role
+            <select @bind="_form.RoleId">
+                <option value="0">-- Select Role --</option>
+                @if (_roles is not null)
+                {
+                    @foreach (var role in _roles)
+                    {
+                        <option value="@role.Id">@role.Name</option>
+                    }
+                }
+            </select>
+        </label>
+
+        @if (_editingId is null)
+        {
+            <label>Password <InputText type="password" @bind-Value="_form.Password" /></label>
+        }
+        else
+        {
+            <label>Active? <InputCheckbox @bind-Value="_form.IsActive" /></label>
+        }
+    </div>
+
+    <div class="turf-actions inline-actions">
+        <button class="btn btn-primary" type="submit">@(_editingId is null ? "Add User" : "Save Changes")</button>
+        @if (_editingId is not null)
+        {
+            <button class="btn btn-pause" type="button" @onclick="CancelEdit">Cancel</button>
+        }
+    </div>
+</EditForm>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <p class="message @(_success ? "message-success" : "message-error")">@_message</p>
+}
+
+<table class="data-table">
+    <thead>
+    <tr><th>Username</th><th>Display Name</th><th>Role</th><th>Active</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+    @if (_users is not null)
+    {
+        @foreach (var user in _users)
+        {
+            <tr class="@(user.Id == _editingId ? "row-editing" : "")">
+                <td>@user.Username</td>
+                <td>@user.DisplayName</td>
+                <td>@user.Role?.Name</td>
+                <td>@(user.IsActive ? "Yes" : "No")</td>
+                <td class="turf-actions inline-actions">
+                    <button class="btn btn-pause" @onclick="() => StartEdit(user)">✏️ Edit</button>
+                    <button class="btn btn-extend" @onclick="() => StartResetPassword(user)">🔑 Reset Password</button>
+                    <button class="btn btn-stop" @onclick="() => Delete(user.Id)">🗑 Delete</button>
+                </td>
+            </tr>
+        }
+    }
+    </tbody>
+</table>
+
+@if (_resetUserId is not null)
+{
+    <h2>🔑 Reset Password</h2>
+    <p class="subtitle">Setting a new password for <strong>@_resetUsername</strong>.</p>
+
+    <EditForm Model="_resetForm" OnValidSubmit="HandleResetPassword">
+        <div class="form-grid">
+            <label>New Password <InputText type="password" @bind-Value="_resetForm.Password" /></label>
+        </div>
+        <div class="turf-actions inline-actions">
+            <button class="btn btn-primary" type="submit">Set Password</button>
+            <button class="btn btn-pause" type="button" @onclick="CancelResetPassword">Cancel</button>
+        </div>
+    </EditForm>
+
+    @if (!string.IsNullOrEmpty(_resetMessage))
+    {
+        <p class="message @(_resetSuccess ? "message-success" : "message-error")">@_resetMessage</p>
+    }
+}
+
+</PagePermissionGuard>
+
+@code {
+    private class UserFormModel
+    {
+        public string Username { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public int RoleId { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+
+    private class ResetFormModel
+    {
+        public string Password { get; set; } = string.Empty;
+    }
+
+    private List<AppUser>? _users;
+    private List<AppRole>? _roles;
+    private UserFormModel _form = new();
+    private int? _editingId;
+    private string? _message;
+    private bool _success;
+
+    private int? _resetUserId;
+    private string? _resetUsername;
+    private ResetFormModel _resetForm = new();
+    private string? _resetMessage;
+    private bool _resetSuccess;
+
+    private int _currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var idClaim = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _currentUserId = int.TryParse(idClaim, out var id) ? id : 0;
+
+        _roles = await RoleRepo.GetAllAsync();
+        await Refresh();
+    }
+
+    private async Task Refresh() => _users = await UserRepo.GetAllAsync();
+
+    private void StartEdit(AppUser user)
+    {
+        _editingId = user.Id;
+        _form = new UserFormModel
+        {
+            Username = user.Username,
+            DisplayName = user.DisplayName,
+            RoleId = user.RoleId,
+            IsActive = user.IsActive
+        };
+        _message = null;
+    }
+
+    private void CancelEdit()
+    {
+        _editingId = null;
+        _form = new UserFormModel();
+    }
+
+    private async Task HandleSave()
+    {
+        if (_form.RoleId == 0)
+        {
+            _success = false;
+            _message = "Please select a role.";
+            return;
+        }
+
+        if (_editingId is null)
+        {
+            var (success, message, _) = await UserSvc.CreateUserAsync(_form.Username, _form.DisplayName, _form.Password, _form.RoleId);
+            _success = success;
+            _message = message;
+            if (success)
+            {
+                _form = new UserFormModel();
+                await Refresh();
+            }
+        }
+        else
+        {
+            var (success, message) = await UserSvc.UpdateUserAsync(_editingId.Value, _form.DisplayName, _form.RoleId, _form.IsActive);
+            _success = success;
+            _message = message;
+            if (success)
+            {
+                CancelEdit();
+                await Refresh();
+            }
+        }
+    }
+
+    private void StartResetPassword(AppUser user)
+    {
+        _resetUserId = user.Id;
+        _resetUsername = user.Username;
+        _resetForm = new ResetFormModel();
+        _resetMessage = null;
+    }
+
+    private void CancelResetPassword()
+    {
+        _resetUserId = null;
+        _resetUsername = null;
+    }
+
+    private async Task HandleResetPassword()
+    {
+        if (_resetUserId is null) return;
+
+        var (success, message) = await UserSvc.ResetPasswordAsync(_resetUserId.Value, _resetForm.Password);
+        _resetSuccess = success;
+        _resetMessage = message;
+        if (success)
+        {
+            CancelResetPassword();
+        }
+    }
+
+    private async Task Delete(int userId)
+    {
+        var (success, message) = await UserSvc.DeleteUserAsync(userId, _currentUserId);
+        _success = success;
+        _message = message;
+        await Refresh();
+    }
+}

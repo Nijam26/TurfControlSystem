@@ -1,0 +1,116 @@
+@page "/admin/permissions"
+@inject IRoleRepository RoleRepo
+@inject IAppPageRepository PageRepo
+@inject IRolePermissionRepository PermissionRepo
+
+<PageTitle>Admin · Permissions</PageTitle>
+
+<PagePermissionGuard PageKey="AdminPermissions">
+
+<h1>🔐 Permissions</h1>
+<p class="subtitle">
+    Tick which pages each role can see. The <strong>Admin</strong> role always has full access
+    (shown checked and locked) so a mistake here can never lock every admin out. Changes take
+    effect the next time each affected user loads a page — they don't need to log out.
+</p>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <p class="message @(_success ? "message-success" : "message-error")">@_message</p>
+}
+
+@if (_roles is not null && _pages is not null)
+{
+    <table class="data-table permission-matrix">
+        <thead>
+        <tr>
+            <th>Page</th>
+            @foreach (var role in _roles)
+            {
+                <th>@role.Name</th>
+            }
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var appPage in _pages)
+        {
+            <tr>
+                <td>
+                    <span>@(appPage.Icon)</span>
+                    <span>@appPage.DisplayName</span>
+                </td>
+                @foreach (var role in _roles)
+                {
+                    var isAdmin = role.IsSystemRole;
+                    var key = (role.Id, appPage.Id);
+                    <td>
+                        <input type="checkbox"
+                               checked="@(isAdmin || _grants.Contains(key))"
+                               disabled="@isAdmin"
+                               @onchange="@(e => ToggleGrant(role.Id, appPage.Id, (bool)e.Value!))" />
+                    </td>
+                }
+            </tr>
+        }
+        </tbody>
+    </table>
+
+    <div class="turf-actions inline-actions" style="margin-top:1rem;">
+        <button class="btn btn-primary" @onclick="SaveAll">💾 Save Permissions</button>
+    </div>
+}
+
+</PagePermissionGuard>
+
+@code {
+    private List<AppRole>? _roles;
+    private List<AppPage>? _pages;
+
+    // In-memory working copy of every grant that changed since load, keyed by (roleId, pageId).
+    private HashSet<(int RoleId, int PageId)> _grants = new();
+    private HashSet<int> _dirtyRoleIds = new();
+
+    private string? _message;
+    private bool _success;
+
+    protected override async Task OnInitializedAsync() => await Refresh();
+
+    private async Task Refresh()
+    {
+        _roles = await RoleRepo.GetAllAsync();
+        _pages = await PageRepo.GetAllAsync();
+
+        var all = await PermissionRepo.GetAllAsync();
+        _grants = all.Where(p => p.CanView).Select(p => (p.RoleId, p.PageId)).ToHashSet();
+        _dirtyRoleIds.Clear();
+    }
+
+    private void ToggleGrant(int roleId, int pageId, bool isChecked)
+    {
+        var key = (roleId, pageId);
+        if (isChecked)
+            _grants.Add(key);
+        else
+            _grants.Remove(key);
+
+        _dirtyRoleIds.Add(roleId);
+    }
+
+    private async Task SaveAll()
+    {
+        if (_roles is null) return;
+
+        // Only rewrite roles whose checkboxes actually changed, so untouched roles' rows aren't
+        // needlessly replaced (their auto-generated IDs stay stable either way, but this keeps
+        // the SaveChanges surface minimal).
+        foreach (var role in _roles.Where(r => !r.IsSystemRole && _dirtyRoleIds.Contains(r.Id)))
+        {
+            var allowedPageIds = _grants.Where(g => g.RoleId == role.Id).Select(g => g.PageId);
+            await PermissionRepo.SetRolePermissionsAsync(role.Id, allowedPageIds);
+        }
+
+        _success = true;
+        _message = "Permissions saved.";
+        await Refresh();
+    }
+}

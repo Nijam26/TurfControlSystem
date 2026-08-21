@@ -1,0 +1,100 @@
+@page "/tv-display"
+@layout TvLayout
+@implements IAsyncDisposable
+@inject TurfTimerService TimerSvc
+@inject IJSRuntime JS
+
+<PageTitle>Turf Arena — Live Display</PageTitle>
+
+<PagePermissionGuard PageKey="TvDisplay">
+
+<div class="tv-header">⚽ TURF ARENA</div>
+
+@if (_statuses is not null)
+{
+    <div class="tv-grid">
+        @foreach (var status in _statuses)
+        {
+            <div class="tv-card status-@status.LightStatus.ToString().ToLowerInvariant()">
+                <div class="tv-turf-name">@status.TurfName</div>
+
+                @if (status.HasActiveBooking)
+                {
+                    <div class="tv-team">@status.TeamName</div>
+                    <div class="tv-countdown">@FormatTime(status.RemainingSeconds)</div>
+                    <div class="tv-status">@(status.IsPaused ? "PAUSED" : LabelFor(status.LightStatus))</div>
+                }
+                else
+                {
+                    <div class="tv-idle">AVAILABLE</div>
+                }
+
+                @if (status.NextTeamName is not null)
+                {
+                    <div class="tv-next">NEXT: @status.NextTeamName — @status.NextStartTime?.ToString("hh:mm tt")</div>
+                }
+            </div>
+        }
+    </div>
+}
+
+</PagePermissionGuard>
+
+@code {
+    private List<TurfStatusDto>? _statuses;
+    private DotNetObjectReference<TvDisplay>? _dotNetRef;
+    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _statuses = await TimerSvc.GetTurfStatusesAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("turfTimer.start", _dotNetRef);
+        }
+    }
+
+    [JSInvokable]
+    public void OnStatusesReceived(string json)
+    {
+        _statuses = JsonSerializer.Deserialize<List<TurfStatusDto>>(json, JsonOpts);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnAnnouncementReceived(string json)
+    {
+        // The TV display doesn't need to show a toast — turfTimer.js already
+        // speaks the announcement aloud via the Web Speech API.
+    }
+
+    private static string FormatTime(int totalSeconds)
+    {
+        var t = TimeSpan.FromSeconds(Math.Max(0, totalSeconds));
+        return $"{(int)t.TotalMinutes:D2}:{t.Seconds:D2}";
+    }
+
+    private static string LabelFor(TurfLightStatus status) => status switch
+    {
+        TurfLightStatus.Running => "RUNNING",
+        TurfLightStatus.EndingSoon => "ENDING SOON",
+        TurfLightStatus.AlmostUp => "TIME ALMOST UP",
+        TurfLightStatus.TimeUp => "TIME UP",
+        _ => "IDLE"
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_dotNetRef is not null)
+        {
+            try { await JS.InvokeVoidAsync("turfTimer.stop"); }
+            catch (JSDisconnectedException) { /* circuit already gone */ }
+            _dotNetRef.Dispose();
+        }
+    }
+}

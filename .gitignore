@@ -1,0 +1,6 @@
+bin/
+obj/
+*.user
+.vs/
+turfcontrol.db
+appsettings.Development.json

@@ -1,0 +1,39 @@
+@page
+@model TurfControlSystem.Pages.Account.LoginModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in — Turf Operating &amp; Live Control System</title>
+    <base href="~/" />
+    <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+    <div class="login-wrap">
+        <form class="login-card" method="post">
+            <div class="nav-brand" style="margin-bottom:1rem;">⚽ TURF ARENA</div>
+            <h1>Sign in</h1>
+
+            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+            {
+                <p class="message message-error">@Model.ErrorMessage</p>
+            }
+
+            <label>Username
+                <input type="text" name="Username" value="@Model.Username" autofocus required />
+            </label>
+            <label>Password
+                <input type="password" name="Password" required />
+            </label>
+
+            <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
+
+            <button class="btn btn-primary" type="submit" style="width:100%;margin-top:.5rem;">Sign in</button>
+        </form>
+    </div>
+</body>
+</html>

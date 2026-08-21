@@ -1,0 +1,244 @@
+@page "/bookings"
+@inject BookingService BookingSvc
+@inject ITurfRepository TurfRepo
+@inject IBookingRepository BookingRepo
+@inject IJSRuntime JS
+
+<PageTitle>Bookings</PageTitle>
+
+<PagePermissionGuard PageKey="Bookings">
+
+<h1>📅 New Booking</h1>
+
+<EditForm Model="_request" OnValidSubmit="HandleCreate">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-grid">
+        <label>Turf
+            <select @bind="_request.TurfId">
+                <option value="0">-- Select Turf --</option>
+                @if (_turfs is not null)
+                {
+                    @foreach (var turf in _turfs)
+                    {
+                        <option value="@turf.Id">@turf.Name (@turf.Type, ৳@turf.HourlyPrice/hr)</option>
+                    }
+                }
+            </select>
+        </label>
+
+        <label>Team Name <InputText @bind-Value="_request.TeamName" /></label>
+        <label>Captain Name <InputText @bind-Value="_request.CaptainName" /></label>
+        <label>Mobile Number <InputText @bind-Value="_request.MobileNumber" /></label>
+        <label>Number of Players <InputNumber @bind-Value="_request.NumberOfPlayers" /></label>
+        <label>Start Time <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="_request.StartTime" /></label>
+
+        <label>Duration (minutes)
+            <select @bind="_request.DurationMinutes">
+                <option value="30">30</option>
+                <option value="60">60</option>
+                <option value="90">90</option>
+                <option value="120">120</option>
+            </select>
+        </label>
+
+        <label>Advance Payment (৳) <InputNumber @bind-Value="_request.AdvancePayment" /></label>
+    </div>
+
+    <button class="btn btn-primary" type="submit">Create Booking</button>
+</EditForm>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <p class="message @(_success ? "message-success" : "message-error")">@_message</p>
+}
+
+@if (_editForm is not null)
+{
+    <h2>✏️ Edit Booking</h2>
+    <p class="subtitle">Only upcoming (not-yet-started) bookings can be edited. Team identity can't be changed here.</p>
+
+    <EditForm Model="_editForm" OnValidSubmit="HandleUpdate">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="form-grid">
+            <label>Turf
+                <select @bind="_editForm.TurfId">
+                    <option value="0">-- Select Turf --</option>
+                    @if (_turfs is not null)
+                    {
+                        @foreach (var turf in _turfs)
+                        {
+                            <option value="@turf.Id">@turf.Name (@turf.Type, ৳@turf.HourlyPrice/hr)</option>
+                        }
+                    }
+                </select>
+            </label>
+
+            <label>Start Time <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="_editForm.StartTime" /></label>
+
+            <label>Duration (minutes)
+                <select @bind="_editForm.DurationMinutes">
+                    <option value="30">30</option>
+                    <option value="60">60</option>
+                    <option value="90">90</option>
+                    <option value="120">120</option>
+                </select>
+            </label>
+
+            <label>Number of Players <InputNumber @bind-Value="_editForm.NumberOfPlayers" /></label>
+            <label>Advance Payment (৳) <InputNumber @bind-Value="_editForm.AdvancePayment" /></label>
+        </div>
+
+        <div class="turf-actions inline-actions">
+            <button class="btn btn-primary" type="submit">Save Changes</button>
+            <button class="btn btn-pause" type="button" @onclick="CancelEditBooking">Cancel</button>
+        </div>
+    </EditForm>
+
+    @if (!string.IsNullOrEmpty(_editMessage))
+    {
+        <p class="message @(_editSuccess ? "message-success" : "message-error")">@_editMessage</p>
+    }
+}
+
+<h2>Today's Bookings</h2>
+
+@if (_todayBookings is not null)
+{
+    <table class="data-table">
+        <thead>
+        <tr>
+            <th>Turf</th><th>Team</th><th>Start</th><th>End</th><th>Status</th><th>Total</th><th>Paid</th><th>Due</th><th>Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var b in _todayBookings)
+        {
+            <tr class="@(b.Id == _editingBookingId ? "row-editing" : "")">
+                <td>@b.Turf?.Name</td>
+                <td>@b.Team?.Name</td>
+                <td>@b.StartTime.ToString("hh:mm tt")</td>
+                <td>@b.EndTime.ToString("hh:mm tt")</td>
+                <td>@b.Status</td>
+                <td>৳@b.TotalAmount.ToString("N0")</td>
+                <td>৳@b.TotalPaid.ToString("N0")</td>
+                <td>৳@b.DueAmount.ToString("N0")</td>
+                <td class="turf-actions inline-actions">
+                    @if (b.Status == BookingStatus.Scheduled)
+                    {
+                        <button class="btn btn-pause" @onclick="() => StartEdit(b)">✏️ Edit</button>
+                        <button class="btn btn-extend" @onclick="() => CancelBooking(b.Id)">✖ Cancel</button>
+                    }
+                    @if (b.Status == BookingStatus.Scheduled || b.Status == BookingStatus.Cancelled)
+                    {
+                        <button class="btn btn-stop" @onclick="() => Delete(b.Id)">🗑 Delete</button>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+</PagePermissionGuard>
+
+@code {
+    private CreateBookingRequest _request = new() { StartTime = DateTime.Now, DurationMinutes = 60 };
+    private UpdateBookingRequest? _editForm;
+    private int? _editingBookingId;
+
+    private List<Turf>? _turfs;
+    private List<Booking>? _todayBookings;
+
+    private string? _message;
+    private bool _success;
+    private string? _editMessage;
+    private bool _editSuccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _turfs = await TurfRepo.GetActiveAsync();
+        await RefreshBookings();
+    }
+
+    private async Task RefreshBookings()
+    {
+        _todayBookings = await BookingRepo.GetTodayAsync(DateTime.Today);
+    }
+
+    private async Task HandleCreate()
+    {
+        var (success, message, _) = await BookingSvc.CreateBookingAsync(_request);
+        _message = message;
+        _success = success;
+
+        if (success)
+        {
+            _request = new CreateBookingRequest { StartTime = DateTime.Now, DurationMinutes = 60 };
+            await RefreshBookings();
+        }
+    }
+
+    private void StartEdit(Booking b)
+    {
+        _editingBookingId = b.Id;
+        _editForm = new UpdateBookingRequest
+        {
+            BookingId = b.Id,
+            TurfId = b.TurfId,
+            StartTime = b.StartTime,
+            DurationMinutes = Math.Max(15, (int)(b.EndTime - b.StartTime).TotalMinutes),
+            NumberOfPlayers = b.NumberOfPlayers,
+            AdvancePayment = b.AdvancePayment
+        };
+        _editMessage = null;
+    }
+
+    private void CancelEditBooking()
+    {
+        _editingBookingId = null;
+        _editForm = null;
+        _editMessage = null;
+    }
+
+    private async Task HandleUpdate()
+    {
+        if (_editForm is null) return;
+
+        var (success, message) = await BookingSvc.UpdateBookingAsync(_editForm);
+        _editSuccess = success;
+        _editMessage = message;
+
+        if (success)
+        {
+            CancelEditBooking();
+            await RefreshBookings();
+        }
+    }
+
+    private async Task CancelBooking(int bookingId)
+    {
+        var (success, message) = await BookingSvc.CancelBookingAsync(bookingId);
+        _success = success;
+        _message = message;
+        await RefreshBookings();
+    }
+
+    private async Task Delete(int bookingId)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Delete this booking? This can't be undone.");
+        if (!confirmed) return;
+
+        var (success, message) = await BookingSvc.DeleteBookingAsync(bookingId);
+        _success = success;
+        _message = message;
+
+        if (_editingBookingId == bookingId)
+            CancelEditBooking();
+
+        await RefreshBookings();
+    }
+}

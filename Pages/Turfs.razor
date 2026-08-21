@@ -1,0 +1,186 @@
+@page "/turfs"
+@inject ITurfRepository TurfRepo
+@inject TurfService TurfSvc
+@inject IJSRuntime JS
+
+<PageTitle>Turfs</PageTitle>
+
+<PagePermissionGuard PageKey="Turfs">
+
+<h1>🏟️ Turfs</h1>
+<p class="subtitle">
+    Add, edit, deactivate, or delete turfs. A turf with booking history can't be
+    hard-deleted — deactivate it instead so past reports stay intact.
+</p>
+
+<EditForm Model="_form" OnValidSubmit="HandleSave">
+    <div class="form-grid">
+        <label>Name <InputText @bind-Value="_form.Name" /></label>
+        <label>Type
+            <select @bind="_form.Type">
+                <option value="@TurfType.FiveASide">5-a-side</option>
+                <option value="@TurfType.SevenASide">7-a-side</option>
+                <option value="@TurfType.ElevenASide">11-a-side</option>
+            </select>
+        </label>
+        <label>Indoor? <InputCheckbox @bind-Value="_form.IsIndoor" /></label>
+        <label>Hourly Price (৳) <InputNumber @bind-Value="_form.HourlyPrice" /></label>
+        <label>Peak Hour Price (৳) <InputNumber @bind-Value="_form.PeakHourPrice" /></label>
+    </div>
+
+    <div class="turf-actions inline-actions">
+        <button class="btn btn-primary" type="submit">@(_editingId is null ? "Add Turf" : "Save Changes")</button>
+        @if (_editingId is not null)
+        {
+            <button class="btn btn-pause" type="button" @onclick="CancelEdit">Cancel</button>
+        }
+    </div>
+</EditForm>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <p class="message @(_success ? "message-success" : "message-error")">@_message</p>
+}
+
+<table class="data-table">
+    <thead>
+    <tr><th>Name</th><th>Type</th><th>Indoor</th><th>Hourly</th><th>Peak</th><th>Active</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+    @if (_turfs is not null)
+    {
+        @foreach (var turf in _turfs)
+        {
+            <tr class="@(turf.Id == _editingId ? "row-editing" : "")">
+                <td>@turf.Name</td>
+                <td>@turf.Type</td>
+                <td>@(turf.IsIndoor ? "Yes" : "No")</td>
+                <td>৳@turf.HourlyPrice.ToString("N0")</td>
+                <td>৳@turf.PeakHourPrice.ToString("N0")</td>
+                <td><input type="checkbox" checked="@turf.IsActive" @onchange="() => ToggleActive(turf.Id)" /></td>
+                <td class="turf-actions inline-actions">
+                    <button class="btn btn-pause" @onclick="() => StartEdit(turf)">✏️ Edit</button>
+                    <button class="btn btn-stop" @onclick="() => Delete(turf.Id)">🗑 Delete</button>
+                </td>
+            </tr>
+        }
+    }
+    </tbody>
+</table>
+
+</PagePermissionGuard>
+
+@code {
+    private List<Turf>? _turfs;
+    private Turf _form = new();
+    private int? _editingId;
+    private string? _message;
+    private bool _success;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshTurfs();
+    }
+
+    private async Task RefreshTurfs()
+    {
+        _turfs = await TurfRepo.GetAllAsync();
+    }
+
+    private void StartEdit(Turf turf)
+    {
+        _editingId = turf.Id;
+        _form = new Turf
+        {
+            Id = turf.Id,
+            Name = turf.Name,
+            Type = turf.Type,
+            IsIndoor = turf.IsIndoor,
+            HourlyPrice = turf.HourlyPrice,
+            PeakHourPrice = turf.PeakHourPrice,
+            OpeningTime = turf.OpeningTime,
+            ClosingTime = turf.ClosingTime,
+            IsActive = turf.IsActive
+        };
+        _message = null;
+    }
+
+    private void CancelEdit()
+    {
+        _editingId = null;
+        _form = new Turf();
+    }
+
+    private async Task HandleSave()
+    {
+        try
+        {
+            if (_editingId is null)
+            {
+                var (success, message, _) = await TurfSvc.CreateTurfAsync(_form);
+                _success = success;
+                _message = message;
+                if (success)
+                {
+                    _form = new Turf();
+                    await RefreshTurfs();
+                }
+            }
+            else
+            {
+                var (success, message) = await TurfSvc.UpdateTurfAsync(_form);
+                _success = success;
+                _message = message;
+                if (success)
+                {
+                    CancelEdit();
+                    await RefreshTurfs();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+            _message = $"Something went wrong while saving: {ex.Message}";
+        }
+    }
+
+    private async Task ToggleActive(int turfId)
+    {
+        try
+        {
+            var (success, message) = await TurfSvc.ToggleActiveAsync(turfId);
+            _success = success;
+            _message = message;
+            await RefreshTurfs();
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+            _message = $"Something went wrong: {ex.Message}";
+        }
+    }
+
+    private async Task Delete(int turfId)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Delete this turf? This can't be undone.");
+        if (!confirmed) return;
+
+        try
+        {
+            var (success, message) = await TurfSvc.DeleteTurfAsync(turfId);
+            _success = success;
+            _message = message;
+
+            if (_editingId == turfId)
+                CancelEdit();
+
+            await RefreshTurfs();
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+            _message = $"Something went wrong while deleting: {ex.Message}";
+        }
+    }
+}

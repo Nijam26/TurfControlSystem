@@ -1,0 +1,11 @@
+global using System.ComponentModel.DataAnnotations;
+global using System.ComponentModel.DataAnnotations.Schema;
+global using System.Text.Json;
+global using Microsoft.EntityFrameworkCore;
+global using Microsoft.AspNetCore.Authorization;
+global using TurfControlSystem.Domain.Common;
+global using TurfControlSystem.Domain.Entities;
+global using TurfControlSystem.Domain.Enums;
+global using TurfControlSystem.Application.DTOs;
+global using TurfControlSystem.Application.Interfaces;
+global using TurfControlSystem.Application.Services;
