@@ -14,56 +14,26 @@
 </head>
 <body>
     <div class="login-wrap">
-        <div class="login-shell">
+        <form class="login-card" method="post">
+            <div class="nav-brand" style="margin-bottom:1rem;">⚽ TURF ARENA</div>
+            <h1>Sign in</h1>
 
-            <!-- Left: brand / hero panel -->
-            <div class="login-hero">
-                <div class="login-hero-glow"></div>
-                <div class="login-hero-content">
-                    <div class="nav-brand login-hero-brand">⚽ TURF ARENA</div>
-                    <h1 class="login-hero-title">Run the pitch<br />from one screen.</h1>
-                    <p class="login-hero-sub">
-                        Live bookings, countdown timers, and daily reports for every turf —
-                        all in real time.
-                    </p>
+            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+            {
+                <p class="message message-error">@Model.ErrorMessage</p>
+            }
 
-                    <ul class="login-hero-points">
-                        <li><span class="login-hero-dot"></span> Live turf status &amp; countdowns</li>
-                        <li><span class="login-hero-dot"></span> Bookings, teams &amp; payments</li>
-                        <li><span class="login-hero-dot"></span> Daily &amp; weekly PDF reports</li>
-                    </ul>
-                </div>
-            </div>
+            <label>Username
+                <input type="text" name="Username" value="@Model.Username" autofocus required />
+            </label>
+            <label>Password
+                <input type="password" name="Password" required />
+            </label>
 
-            <!-- Right: sign-in form -->
-            <div class="login-form-side">
-                <form class="login-card" method="post">
-                    <div class="login-card-header">
-                        <h2>Welcome back</h2>
-                        <p class="subtitle" style="margin-bottom:0;">Sign in to continue to your dashboard</p>
-                    </div>
+            <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
 
-                    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
-                    {
-                        <p class="message message-error">@Model.ErrorMessage</p>
-                    }
-
-                    <label>Username
-                        <input type="text" name="Username" value="@Model.Username" autofocus required placeholder="Enter your username" />
-                    </label>
-                    <label>Password
-                        <input type="password" name="Password" required placeholder="Enter your password" />
-                    </label>
-
-                    <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
-
-                    <button class="btn btn-primary login-submit" type="submit">Sign in</button>
-
-                    <p class="login-footnote">Ask an admin if you need access to a turf or role.</p>
-                </form>
-            </div>
-
-        </div>
+            <button class="btn btn-primary" type="submit" style="width:100%;margin-top:.5rem;">Sign in</button>
+        </form>
     </div>
 </body>
 </html>
