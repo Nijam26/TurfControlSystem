@@ -1,0 +1,110 @@
+@page "/theme"
+@inject IJSRuntime JS
+
+<PageTitle>Theme</PageTitle>
+
+<h1>🎨 Theme</h1>
+<p class="subtitle">Pick a preset or build your own. Saved to this browser, applied across the whole app.</p>
+
+<div class="theme-presets">
+    @foreach (var preset in _presets)
+    {
+        <button class="theme-swatch @(!_isCustom && preset.Key == _currentName ? "theme-swatch-active" : "")"
+                @onclick="() => ApplyPreset(preset.Key)">
+            <span class="theme-swatch-dot" style="background:@preset.Brand;"></span>
+            @preset.Label
+        </button>
+    }
+</div>
+
+<h2>Custom Theme</h2>
+<div class="theme-custom-grid">
+    <label>Background <input type="color" @bind="_bg" @bind:event="oninput" /></label>
+    <label>Panel <input type="color" @bind="_panel" @bind:event="oninput" /></label>
+    <label>Border <input type="color" @bind="_border" @bind:event="oninput" /></label>
+    <label>Text <input type="color" @bind="_text" @bind:event="oninput" /></label>
+    <label>Muted Text <input type="color" @bind="_textDim" @bind:event="oninput" /></label>
+    <label>Accent <input type="color" @bind="_brand" @bind:event="oninput" /></label>
+</div>
+
+<div class="turf-actions inline-actions">
+    <button class="btn btn-primary" @onclick="ApplyCustom">Apply Custom Theme</button>
+</div>
+
+@code {
+    private record PresetInfo(string Key, string Label, string Brand);
+
+    private readonly List<PresetInfo> _presets = new()
+    {
+        new("dark", "Dark", "#22c55e"),
+        new("light", "Light", "#16a34a"),
+        new("ocean", "Ocean", "#38bdf8"),
+        new("forest", "Forest", "#4ade80"),
+        new("sunset", "Sunset", "#fb923c"),
+    };
+
+    private string _currentName = "dark";
+    private bool _isCustom;
+
+    private string _bg = "#0f1115";
+    private string _panel = "#161920";
+    private string _border = "#2a2f3a";
+    private string _text = "#e8eaed";
+    private string _textDim = "#9aa1ac";
+    private string _brand = "#22c55e";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        var json = await JS.InvokeAsync<string>("turfTheme.getCurrent");
+        var saved = JsonSerializer.Deserialize<SavedTheme>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        if (saved?.CustomColors is not null)
+        {
+            _isCustom = true;
+            _bg = saved.CustomColors.Bg;
+            _panel = saved.CustomColors.Panel;
+            _border = saved.CustomColors.Border;
+            _text = saved.CustomColors.Text;
+            _textDim = saved.CustomColors.TextDim;
+            _brand = saved.CustomColors.Brand;
+        }
+        else
+        {
+            _currentName = saved?.Name ?? "dark";
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task ApplyPreset(string name)
+    {
+        _currentName = name;
+        _isCustom = false;
+        await JS.InvokeVoidAsync("turfTheme.apply", name);
+    }
+
+    private async Task ApplyCustom()
+    {
+        _isCustom = true;
+        var colors = new { bg = _bg, panel = _panel, border = _border, text = _text, textDim = _textDim, brand = _brand };
+        await JS.InvokeVoidAsync("turfTheme.applyCustom", colors);
+    }
+
+    private class SavedTheme
+    {
+        public string? Name { get; set; }
+        public CustomColors? CustomColors { get; set; }
+    }
+
+    private class CustomColors
+    {
+        public string Bg { get; set; } = "#0f1115";
+        public string Panel { get; set; } = "#161920";
+        public string Border { get; set; } = "#2a2f3a";
+        public string Text { get; set; } = "#e8eaed";
+        public string TextDim { get; set; } = "#9aa1ac";
+        public string Brand { get; set; } = "#22c55e";
+    }
+}

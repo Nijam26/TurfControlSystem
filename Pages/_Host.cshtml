@@ -11,6 +11,40 @@
     <base href="~/" />
     <link rel="stylesheet" href="css/app.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/themes/dark.min.css" />
+    <script>
+        // Applies the saved theme before first paint, so there's no flash of the default
+        // dark theme for users who picked something else. Full apply/save logic lives in
+        // js/theme.js — this is just enough to avoid the flash.
+        (function () {
+            function shade(hex, pct) {
+                hex = hex.replace('#', '');
+                var n = parseInt(hex, 16);
+                var a = Math.round(255 * pct / 100);
+                var r = Math.max(0, Math.min(255, (n >> 16) + a));
+                var g = Math.max(0, Math.min(255, ((n >> 8) & 255) + a));
+                var b = Math.max(0, Math.min(255, (n & 255) + a));
+                return '#' + (0x1000000 + r * 0x10000 + g * 0x100 + b).toString(16).slice(1);
+            }
+            try {
+                var saved = JSON.parse(localStorage.getItem('turfTheme') || 'null');
+                var root = document.documentElement;
+                if (saved && saved.customColors) {
+                    var c = saved.customColors;
+                    root.setAttribute('data-theme', 'custom');
+                    root.style.setProperty('--bg', c.bg);
+                    root.style.setProperty('--panel', c.panel);
+                    root.style.setProperty('--panel-alt', shade(c.panel, 8));
+                    root.style.setProperty('--border', c.border);
+                    root.style.setProperty('--text', c.text);
+                    root.style.setProperty('--text-dim', c.textDim);
+                    root.style.setProperty('--brand', c.brand);
+                    root.style.setProperty('--brand-dark', shade(c.brand, -12));
+                } else {
+                    root.setAttribute('data-theme', (saved && saved.name) || 'dark');
+                }
+            } catch (e) { /* falls through to the default dark theme */ }
+        })();
+    </script>
 </head>
 <body>
     <component type="typeof(TurfControlSystem.App)" render-mode="ServerPrerendered" />
@@ -19,6 +53,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
     <script src="js/turfTimer.js"></script>
     <script src="js/reportDatePicker.js"></script>
+    <script src="js/theme.js"></script>
     <script src="_framework/blazor.server.js"></script>
 </body>
 </html>
