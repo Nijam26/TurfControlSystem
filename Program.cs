@@ -64,6 +64,7 @@ builder.Services.AddScoped<TurfTimerService>();
 builder.Services.AddScoped<AnnouncementService>();
 builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<ReportPdfService>();
+builder.Services.AddScoped<ReportExcelService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<PermissionService>();
 builder.Services.AddScoped<RoleManagementService>();
@@ -114,6 +115,19 @@ app.MapGet("/api/reports/export-pdf", async (DateTime start, DateTime? end, Repo
         : $"TurfReport_{report.StartDate:yyyyMMdd}-{report.EndDate:yyyyMMdd}.pdf";
 
     return Results.File(pdfBytes, "application/pdf", fileName);
+});
+
+// ---- Reports: Excel download (same data as the PDF export, as an .xlsx workbook) ----
+app.MapGet("/api/reports/export-excel", async (DateTime start, DateTime? end, ReportService reportService, ReportExcelService excelService) =>
+{
+    var report = await reportService.GetReportAsync(start, end ?? start);
+    var excelBytes = excelService.GenerateExcel(report);
+
+    var fileName = report.IsSingleDay
+        ? $"TurfReport_{report.StartDate:yyyyMMdd}.xlsx"
+        : $"TurfReport_{report.StartDate:yyyyMMdd}-{report.EndDate:yyyyMMdd}.xlsx";
+
+    return Results.File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
 });
 
 app.MapFallbackToPage("/_Host");

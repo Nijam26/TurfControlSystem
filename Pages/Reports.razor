@@ -18,6 +18,7 @@
     @if (_report is not null && _errorMessage is null)
     {
         <a class="btn btn-pdf" href="@PdfDownloadUrl" target="_blank">⬇ Download PDF</a>
+        <a class="btn btn-excel" href="@ExcelDownloadUrl" target="_blank">⬇ Download Excel</a>
     }
 </div>
 
@@ -121,6 +122,9 @@
 
     private string PdfDownloadUrl =>
         $"/api/reports/export-pdf?start={_startDate:yyyy-MM-dd}&end={_endDate:yyyy-MM-dd}";
+
+    private string ExcelDownloadUrl =>
+        $"/api/reports/export-excel?start={_startDate:yyyy-MM-dd}&end={_endDate:yyyy-MM-dd}";
 
     public async ValueTask DisposeAsync()
     {

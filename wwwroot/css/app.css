@@ -385,6 +385,21 @@ input, select {
         color: var(--brand);
     }
 
+.btn-excel {
+    background: var(--panel-alt);
+    color: var(--text);
+    border: 1px solid var(--border);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    margin-left: .5rem;
+}
+
+    .btn-excel:hover {
+        border-color: #16a34a;
+        color: #16a34a;
+    }
+
 .report-error {
     color: var(--red);
     font-size: .9rem;
